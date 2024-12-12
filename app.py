@@ -5,9 +5,9 @@ import os
 import json
 import tempfile
 from datetime import datetime
-import soundfile as sf
 from pathlib import Path
 import re
+from pydub import AudioSegment
 
 app = Flask(__name__)
 UPLOAD_FOLDER = "outputs"
@@ -102,12 +102,17 @@ def analyze_grammar(text: str) -> list:
 
     return errors
 
-def analyze_speech(audio_data, sample_rate):
+def convert_to_wav(input_file, output_file):
+    """Convert audio file to .wav format."""
+    audio = AudioSegment.from_file(input_file)
+    audio.export(output_file, format="wav")
+
+def analyze_speech(audio_path, sample_rate):
     """Analyze speech and return all results."""
     model = whisper.load_model("medium")
 
     result = model.transcribe(
-        audio_data,
+        audio_path,
         language="en",
         word_timestamps=True,
         initial_prompt="Include hesitations, fillers, and repetitions."
@@ -194,9 +199,17 @@ def analyze():
         file = request.files["audio"]
 
         with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
-            file.save(temp_file.name)
+            temp_file_path = temp_file.name
 
-            analysis_result = analyze_speech(temp_file.name, 16000)
+            if file.filename.endswith('.mp3'):
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_mp3:
+                    file.save(temp_mp3.name)
+                    convert_to_wav(temp_mp3.name, temp_file_path)
+                    os.unlink(temp_mp3.name)
+            else:
+                file.save(temp_file_path)
+
+            analysis_result = analyze_speech(temp_file_path, 16000)
             reports = generate_reports(analysis_result)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -217,8 +230,8 @@ def analyze():
         return jsonify({"error": str(e)}), 500
 
     finally:
-        if 'temp_file' in locals():
-            os.unlink(temp_file.name)
+        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
