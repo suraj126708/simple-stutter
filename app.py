@@ -5,13 +5,9 @@ import os
 import json
 import tempfile
 from datetime import datetime
-import soundfile as sf
-from pathlib import Path
 import re
 
 app = Flask(__name__)
-UPLOAD_FOLDER = "outputs"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def detect_repetitions(text: str, segments: list) -> list:
     """Detect word repetitions in speech."""
@@ -102,12 +98,12 @@ def analyze_grammar(text: str) -> list:
 
     return errors
 
-def analyze_speech(audio_data, sample_rate):
+def analyze_speech(audio_path, sample_rate):
     """Analyze speech and return all results."""
     model = whisper.load_model("medium")
 
     result = model.transcribe(
-        audio_data,
+        audio_path,
         language="en",
         word_timestamps=True,
         initial_prompt="Include hesitations, fillers, and repetitions."
@@ -196,21 +192,15 @@ def analyze():
         with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
             file.save(temp_file.name)
 
+            # Analyze the audio file
             analysis_result = analyze_speech(temp_file.name, 16000)
             reports = generate_reports(analysis_result)
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = Path(UPLOAD_FOLDER) / f"analysis_{timestamp}.json"
-
-            os.makedirs(output_path.parent, exist_ok=True)
-            with open(output_path, 'w') as f:
-                json.dump(reports, f, indent=2)
-
+            # Directly return the analysis results as JSON response
             return jsonify({
                 "status": "success",
-                "timestamp": timestamp,
-                "reports": reports,
-                "file_path": str(output_path)
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "reports": reports
             })
 
     except Exception as e:
