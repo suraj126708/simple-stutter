@@ -18,28 +18,27 @@ def detect_repetitions(text: str, segments: list) -> list:
     words = text.lower().split()
     repetitions = []
     i = 0
-    
+
     while i < len(words) - 1:
         current_word = words[i]
         count = 1
         start_time = None
         end_time = None
-        
+
         # Look for repetitions
         j = i + 1
         while j < len(words) and words[j] == current_word:
             count += 1
             j += 1
-            
+
         # If repetition found, get timing information
         if count > 1:
-            # Find timing in segments
             for segment in segments:
                 if current_word in segment['text'].lower():
                     if start_time is None:
                         start_time = segment['start']
                     end_time = segment['end']
-            
+
             repetitions.append({
                 'word': current_word,
                 'count': count,
@@ -49,18 +48,17 @@ def detect_repetitions(text: str, segments: list) -> list:
             i = j
         else:
             i += 1
-    
+
     return repetitions
 
 def analyze_grammar(text: str) -> list:
     """Basic grammar analysis."""
     errors = []
     sentences = re.split('[.!?]+', text)
-    
+
     for sentence in sentences:
-        # Check for common errors
         words = sentence.strip().lower().split()
-        
+
         # Double negatives
         negatives = ['not', "n't", 'no', 'never', 'none', 'nothing']
         neg_count = sum(1 for word in words if any(neg in word for neg in negatives))
@@ -70,12 +68,12 @@ def analyze_grammar(text: str) -> list:
                 'text': sentence.strip(),
                 'description': 'Multiple negatives in sentence'
             })
-        
+
         # Subject-verb agreement
         if len(words) >= 2:
             singular_subjects = ['i', 'he', 'she', 'it']
             plural_verbs = ['are', 'were', 'have']
-            
+
             for i, word in enumerate(words[:-1]):
                 if word in singular_subjects and words[i+1] in plural_verbs:
                     errors.append({
@@ -83,7 +81,7 @@ def analyze_grammar(text: str) -> list:
                         'text': f"{word} {words[i+1]}",
                         'description': 'Subject-verb agreement error'
                     })
-        
+
         # Article usage
         articles = ['a', 'an']
         for i, word in enumerate(words[:-1]):
@@ -101,15 +99,13 @@ def analyze_grammar(text: str) -> list:
                         'text': f"{word} {next_word}",
                         'description': 'Incorrect article usage'
                     })
-    
+
     return errors
 
 def analyze_speech(audio_data, sample_rate):
     """Analyze speech and return all results."""
-    # Initialize Whisper model
     model = whisper.load_model("medium")
-    
-    # Transcribe with detailed settings
+
     result = model.transcribe(
         audio_data,
         language="en",
@@ -117,15 +113,14 @@ def analyze_speech(audio_data, sample_rate):
         initial_prompt="Include hesitations, fillers, and repetitions."
     )
 
-    # Extract basic filler words
     filler_words = ['um', 'uh', 'er', 'ah', 'like', 'you know']
     fillers = []
     word_count = 0
-    
+
     for segment in result['segments']:
         words = segment['text'].split()
         word_count += len(words)
-        
+
         for word in words:
             word = word.lower().strip('.,!?')
             if word in filler_words:
@@ -135,13 +130,9 @@ def analyze_speech(audio_data, sample_rate):
                     'segment_text': segment['text']
                 })
 
-    # Detect repetitions
     repetitions = detect_repetitions(result['text'], result['segments'])
-    
-    # Analyze grammar
     grammar_errors = analyze_grammar(result['text'])
 
-    # Calculate basic metrics
     duration = float(result['segments'][-1]['end']) if result['segments'] else 0
     speech_rate = (word_count / duration * 60) if duration > 0 else 0
 
@@ -186,6 +177,14 @@ def generate_reports(analysis_result):
         }
     }
 
+@app.route("/test", methods=["GET"])
+def test():
+    return jsonify({
+        "status": "success",
+        "message": "Test route is working!",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
     try:
@@ -193,20 +192,16 @@ def analyze():
             return jsonify({"error": "No audio file uploaded"}), 400
 
         file = request.files["audio"]
-        
+
         with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
             file.save(temp_file.name)
-            
-            # Analyze
+
             analysis_result = analyze_speech(temp_file.name, 16000)
-            
-            # Generate reports
             reports = generate_reports(analysis_result)
-            
-            # Save to file
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = Path(UPLOAD_FOLDER) / f"analysis_{timestamp}.json"
-            
+
             os.makedirs(output_path.parent, exist_ok=True)
             with open(output_path, 'w') as f:
                 json.dump(reports, f, indent=2)
@@ -222,7 +217,6 @@ def analyze():
         return jsonify({"error": str(e)}), 500
 
     finally:
-        # Cleanup
         if 'temp_file' in locals():
             os.unlink(temp_file.name)
 
